@@ -28,12 +28,12 @@ func MakeAndPushBuild(forcePush bool, dirtyWorkDirOverride bool, keepTestContain
 	}
 }
 func MakeAndTestBuild(dirtyWorkDirOverride bool, keepTestContainer bool, repoConfigParam config.RepoConfigMap) {
+	repoConfig = repoConfigParam
+
 	if !DockerAmLoggedIn() {
 		fmt.Println("=> Uh oh, you're not logged into the configured docker remote for this repo. You won't be able to push!")
 		os.Exit(1)
 	}
-
-	repoConfig = repoConfigParam
 
 	// Builds the docker image and tags it with the image short-name (ie. without the registry path)
 	if repoConfig.ClusterName == "production" && !workingDirectoryIsClean() {

@@ -104,5 +104,11 @@ func DockerAmLoggedIn() bool {
 		}
 	}
 
+	fmt.Println("=> Found following authenticated docker remotes:")
+	for _, remoteName := range loggedInRemotes {
+		fmt.Printf("      %s\n", remoteName)
+	}
+	fmt.Printf("=> We are looking for: %s", authToLookFor)
+
 	return false
 }

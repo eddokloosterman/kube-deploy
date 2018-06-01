@@ -33,7 +33,7 @@ func main() {
 	}
 	// TODO: for some reason, on a linux machine, if any command other than 'curl' is executed first, all
 	//		 subcommands fail - but sometimes, the first-run after 'go build' works. Who knows...
-	if exitCode := cli.GetCommandExitCode("curl", "-s --connect-timeout 3 https://ifconfig.io"); exitCode != 0 {
+	if exitCode := cli.GetCommandExitCode("curl", "-s --connect-timeout 3 https://google.com"); exitCode != 0 {
 		fmt.Println("=> Uh oh, looks like you're not connected to the internet (or maybe it's just too slow).")
 		os.Exit(1)
 	}
@@ -42,13 +42,14 @@ func main() {
 		fmt.Println("=> First, I'm going to read the repo configuration file.")
 		repoConfig = config.InitRepoConfig(fmt.Sprintf("%s/deploy.yaml", pwd))
 		fmt.Printf(`=> I found the following data:
+	Registry root: %s
 	Repository name: %s
 	Current branch: %s
 	HEAD hash: %s
 			
 => That means we're dealing with the image tag:
 	%s
-`, repoConfig.Application.Name, repoConfig.GitBranch, repoConfig.GitSHA, repoConfig.ImageFullPath)
+`, repoConfig.DockerRepository.RegistryRoot, repoConfig.Application.Name, repoConfig.GitBranch, repoConfig.GitSHA, repoConfig.ImageFullPath)
 	}
 
 	// args has to have at least length 2, since the first element is the executable name
