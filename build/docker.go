@@ -9,6 +9,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/mycujoo/kube-deploy/cli"
+	"github.com/mycujoo/kube-deploy/config"
 )
 
 type gcloudDockerTag struct {
@@ -53,8 +54,8 @@ func DockerImageExistsLocal() bool {
 	return true
 }
 
-func DockerImageExistsRemote() bool {
-	exitCode := cli.GetCommandExitCode("docker", fmt.Sprintf("pull %s", repoConfig.ImageFullPath))
+func DockerImageExistsRemote(repoConfigParam config.RepoConfigMap) bool {
+	exitCode := cli.GetCommandExitCode("docker", fmt.Sprintf("pull %s", repoConfigParam.ImageFullPath))
 
 	if exitCode != 0 {
 		return false

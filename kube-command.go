@@ -20,7 +20,7 @@ import (
 func kubeStartRollout() {
 
 	fmt.Println("=> Checking to see if the docker image exists on the remote repository (so we know whether we have to build an image or not).\n=> This might take a minute...")
-	if build.DockerImageExistsRemote() {
+	if build.DockerImageExistsRemote(repoConfig) {
 		fmt.Println("=> Looks like an image already exists on the remote, so we'll use that.")
 	} else {
 		fmt.Println("=> No image exists, so we'll build one now.")
