@@ -13,24 +13,21 @@ import (
 
 const testCommandImage = "mycujoo/gcloud-docker"
 
-var repoConfig config.RepoConfigMap
-
-func MakeAndPushBuild(forcePush bool, dirtyWorkDirOverride bool, keepTestContainer bool, repoConfigParam config.RepoConfigMap) {
-	MakeAndTestBuild(dirtyWorkDirOverride, keepTestContainer, repoConfigParam)
+func MakeAndPushBuild(forcePush bool, dirtyWorkDirOverride bool, keepTestContainer bool, repoConfig config.RepoConfigMap) {
+	MakeAndTestBuild(dirtyWorkDirOverride, keepTestContainer, repoConfig)
 	var pushExitCode int
 	if forcePush {
-		pushExitCode = forcePushDockerImage()
+		pushExitCode = forcePushDockerImage(repoConfig)
 	} else {
-		pushExitCode = askPushDockerImage()
+		pushExitCode = askPushDockerImage(repoConfig)
 	}
 	if pushExitCode != 0 {
 		os.Exit(1)
 	}
 }
-func MakeAndTestBuild(dirtyWorkDirOverride bool, keepTestContainer bool, repoConfigParam config.RepoConfigMap) {
-	repoConfig = repoConfigParam
 
-	if !DockerAmLoggedIn() {
+func MakeAndTestBuild(dirtyWorkDirOverride bool, keepTestContainer bool, repoConfig config.RepoConfigMap) {
+	if !DockerAmLoggedIn(repoConfig.DockerRepository.RegistryRoot) {
 		fmt.Println("=> Uh oh, you're not logged into the configured docker remote for this repo. You won't be able to push!")
 		os.Exit(1)
 	}
@@ -46,8 +43,8 @@ func MakeAndTestBuild(dirtyWorkDirOverride bool, keepTestContainer bool, repoCon
 		}
 	}
 
-	makeBuild()
-	RunBuildTests(keepTestContainer)
+	makeBuild(repoConfig)
+	RunBuildTests(keepTestContainer, repoConfig)
 }
 
 func workingDirectoryIsClean() bool {
@@ -64,22 +61,25 @@ func workingDirectoryIsClean() bool {
 	return true
 }
 
-func makeBuild() {
+func makeBuild(repoConfig config.RepoConfigMap) {
 
 	fmt.Println("=> Okay, let's start the build process!")
 	fmt.Printf("=> First, let's build the image with tag: %s\n\n", repoConfig.ImageFullPath)
 	time.Sleep(1 * time.Second)
 
+	DockerImageExistsRemote(repoConfig.ImageCachePath)
+
 	// Run docker build
 	if exitCode := cli.StreamAndGetCommandExitCode(
 		"docker",
-		fmt.Sprintf("build -t %s %s", repoConfig.ImageFullPath, repoConfig.PWD),
+		fmt.Sprintf("build --cache-from %s -t %s -t %s %s", repoConfig.ImageCachePath, repoConfig.ImageFullPath, repoConfig.ImageCachePath, repoConfig.PWD),
+		// fmt.Sprintf("build -t %s -t %s %s", repoConfig.ImageFullPath, repoConfig.ImageCachePath, repoConfig.PWD),
 	); exitCode != 0 {
 		os.Exit(1)
 	}
 }
 
-func RunBuildTests(keepTestContainer bool) {
+func RunBuildTests(keepTestContainer bool, repoConfig config.RepoConfigMap) {
 	// Start container and run tests
 	tests := repoConfig.Tests
 	for _, testSet := range tests {
@@ -153,7 +153,7 @@ func teardownTest(containerName string, exit bool, keepTestContainer bool) {
 		fmt.Println("=> Stopping test container.")
 		cli.GetCommandOutput("docker", fmt.Sprintf("stop %s", containerName))
 		if keepTestContainer {
-			fmt.Println("=> Leaving the test container without deleting, like you asked.\n")
+			fmt.Println("=> Leaving the test container without deleting, like you asked.")
 		} else {
 			fmt.Println("=> Removing test container.")
 			cli.GetCommandOutput("docker", fmt.Sprintf("rm %s", containerName))
@@ -164,7 +164,7 @@ func teardownTest(containerName string, exit bool, keepTestContainer bool) {
 	}
 }
 
-func askPushDockerImage() int {
+func askPushDockerImage(repoConfig config.RepoConfigMap) int {
 	fmt.Print("=> Yay, all the tests passed! Would you like to push this to the remote now?\n=> Press 'y' to push, anything else to exit.\n>>> ") // TODO - make this pluggable
 	reader := bufio.NewReader(os.Stdin)
 	confirm, _ := reader.ReadString('\n')
@@ -172,10 +172,13 @@ func askPushDockerImage() int {
 		fmt.Println("=> Thanks for building, Bob!")
 		os.Exit(0)
 	}
-	return cli.StreamAndGetCommandExitCode("docker", fmt.Sprintf("push %s", repoConfig.ImageFullPath))
-
+	return forcePushDockerImage(repoConfig)
 }
 
-func forcePushDockerImage() int {
-	return cli.StreamAndGetCommandExitCode("docker", fmt.Sprintf("push %s", repoConfig.ImageFullPath))
+func forcePushDockerImage(repoConfig config.RepoConfigMap) int {
+	pushCode := cli.StreamAndGetCommandExitCode("docker", fmt.Sprintf("push %s", repoConfig.ImageFullPath))
+	if pushCode != 0 {
+		return pushCode
+	}
+	return cli.StreamAndGetCommandExitCode("docker", fmt.Sprintf("push %s", repoConfig.ImageCachePath))
 }

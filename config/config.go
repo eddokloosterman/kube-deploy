@@ -37,7 +37,9 @@ type RepoConfigMap struct {
 	Namespace            string
 	GitBranch            string
 	GitSHA               string
+	ImageName            string
 	ImageTag             string
+	ImageCachePath       string
 	ImageFullPath        string `yaml:"imageFullPath"`
 	PWD                  string
 	ReleaseName          string
@@ -110,13 +112,19 @@ func InitRepoConfig(configFilePath string) RepoConfigMap {
 		fmt.Sprintf("%.25s", repoConfig.GitBranch),
 		repoConfig.GitSHA)
 
+	cacheTag := fmt.Sprintf("%s-cache",
+		repoConfig.Application.Version)
+
 	if repoConfig.ImageFullPath == "" { // if the path was not already provided in the deploy.yaml
 		if repoConfig.DockerRepository.RegistryRoot != "" {
-			repoConfig.ImageFullPath = fmt.Sprintf("%s/%s/%s:%s", repoConfig.DockerRepository.RegistryRoot, repoConfig.DockerRepositoryName, repoConfig.Application.Name, repoConfig.ImageTag)
+			repoConfig.ImageName = fmt.Sprintf("%s/%s/%s", repoConfig.DockerRepository.RegistryRoot, repoConfig.DockerRepositoryName, repoConfig.Application.Name)
 		} else { // For DockerHub images, no RegistryRoot is needed
-			repoConfig.ImageFullPath = fmt.Sprintf("%s/%s:%s", repoConfig.DockerRepositoryName, repoConfig.Application.Name, repoConfig.ImageTag)
+			repoConfig.ImageName = fmt.Sprintf("%s/%s", repoConfig.DockerRepositoryName, repoConfig.Application.Name)
 		}
 	}
+
+	repoConfig.ImageFullPath = fmt.Sprintf("%s:%s", repoConfig.ImageName, repoConfig.ImageTag)
+	repoConfig.ImageCachePath = fmt.Sprintf("%s:%s", repoConfig.ImageName, cacheTag)
 
 	repoConfig.ReleaseName = fmt.Sprintf("%.25s-%s", repoConfig.Application.Name, repoConfig.ImageTag)
 	repoConfig.PWD, err = os.Getwd()

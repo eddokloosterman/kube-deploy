@@ -88,7 +88,7 @@ func main() {
 				repoConfig,
 			)
 		case "testonly":
-			build.RunBuildTests(runFlags.Bool("keep-test-container"))
+			build.RunBuildTests(runFlags.Bool("keep-test-container"), repoConfig)
 
 		case "start-rollout":
 			kubeStartRollout()
@@ -109,7 +109,7 @@ func main() {
 		case "active-deployments":
 			kubeListDeployments()
 		case "list-tags":
-			build.DockerListTags()
+			build.DockerListTags(repoConfig.ImageName)
 
 		case "status":
 			if status := cli.IsLocked(repoConfig.Application.Name); status == false {
@@ -176,7 +176,7 @@ func parseFlags() {
 	runFlags.NewBoolFlag("quiet", "q", "Silences as much output as possible.")
 	runFlags.NewBoolFlag("keep-kubernetes-template-files", "", "Leaves the templated-out kubernetes files under the directory '.kubedeploy-temp'.")
 	if err := runFlags.Parse(os.Args...); err != nil {
-		fmt.Println("\n=> Oh no, I don't know what to do with those command line flags. Sorry...\n")
+		fmt.Println("\n=> Oh no, I don't know what to do with those command line flags. Sorry...")
 		fmt.Println(runFlags.ShowUsage(4))
 		os.Exit(1)
 	}

@@ -20,7 +20,7 @@ import (
 func kubeStartRollout() {
 
 	fmt.Println("=> Checking to see if the docker image exists on the remote repository (so we know whether we have to build an image or not).\n=> This might take a minute...")
-	if build.DockerImageExistsRemote(repoConfig) {
+	if build.DockerImageExistsRemote(repoConfig.ImageFullPath) {
 		fmt.Println("=> Looks like an image already exists on the remote, so we'll use that.")
 	} else {
 		fmt.Println("=> No image exists, so we'll build one now.")
@@ -37,7 +37,7 @@ func kubeStartRollout() {
 	skipCanary := runFlags.Bool("no-canary") || runFlags.Bool("force")
 
 	if existingDeployment := kubeapi.GetSingleDeployment(repoConfig.ReleaseName); existingDeployment.Name != "" {
-		fmt.Println("=> Looks like there is an existing deployment by this name, so we'll just update/replace it.\n")
+		fmt.Println("=> Looks like there is an existing deployment by this name, so we'll just update/replace it.")
 	}
 
 	previousReleases := kubeapi.ListDeployments(map[string]string{
