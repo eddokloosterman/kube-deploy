@@ -18,9 +18,10 @@ import (
 // RepoConfigMap : hash of the YAML data from project's deploy.yaml
 type RepoConfigMap struct {
 	DockerRepository struct {
-		DevelopmentRepositoryName string `yaml:"developmentRepositoryName"`
-		ProductionRepositoryName  string `yaml:"productionRepositoryName"`
-		RegistryRoot              string `yaml:"registryRoot"`
+		DevelopmentRepositoryName string            `yaml:"developmentRepositoryName"`
+		ProductionRepositoryName  string            `yaml:"productionRepositoryName"`
+		BranchRepositoryName      map[string]string `yaml:"branchRepositoryName"`
+		RegistryRoot              string            `yaml:"registryRoot"`
 	} `yaml:"dockerRepository"`
 	Application struct {
 		PackageJSON           bool   `yaml:"packageJSON"`
@@ -104,6 +105,12 @@ func InitRepoConfig(configFilePath string) RepoConfigMap {
 		repoConfig.ClusterName = "development"
 		if repoConfig.Namespace == "" {
 			repoConfig.Namespace = "development"
+		}
+	}
+
+	for heading := range repoConfig.DockerRepository.BranchRepositoryName {
+		if repoConfig.GitBranch == heading {
+			repoConfig.DockerRepositoryName = repoConfig.DockerRepository.BranchRepositoryName[heading]
 		}
 	}
 
