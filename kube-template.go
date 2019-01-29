@@ -71,6 +71,7 @@ func runConsulTemplate(filename string) string {
 		"staging":     []string{"master", "staging"},
 		"development": []string{"else", "dev"},
 		"acceptance":  []string{"acceptance"},
+		"preview":     []string{"preview"},
 	}
 
 	headingToLookFor := environmentToBranchMappings[repoConfig.Namespace]
