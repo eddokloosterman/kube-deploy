@@ -12,6 +12,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+type envMap map[string]string
+
 // repoConfigMap : hash of the YAML data from project's deploy.yaml
 type repoConfigMap struct {
 	DockerRepository struct {
@@ -38,6 +40,7 @@ type repoConfigMap struct {
 	ImageFullPath        string `yaml:"imageFullPath"`
 	PWD                  string
 	ReleaseName          string
+	EnvMap               envMap
 	KubeAPIClientSet     *kubernetes.Clientset
 	Tests                []testConfigMap `yaml:"tests"`
 }
@@ -75,31 +78,26 @@ func initRepoConfig(configFilePath string) repoConfigMap {
 		repoConfig.Application.Name, repoConfig.Application.Version = readFromPackageJSON()
 	}
 
+	e := make(envMap)
+	detectedNamespace := ""
+
 	switch branch := repoConfig.GitBranch; branch {
 	case "production":
 		repoConfig.DockerRepositoryName = repoConfig.DockerRepository.ProductionRepositoryName
 		repoConfig.ClusterName = "production"
-		if repoConfig.Namespace == "" {
-			repoConfig.Namespace = "production"
-		}
+		detectedNamespace = "production"
 	case "master":
 		repoConfig.DockerRepositoryName = repoConfig.DockerRepository.ProductionRepositoryName
 		repoConfig.ClusterName = "production" // deploy to production cluster
-		if repoConfig.Namespace == "" {
-			repoConfig.Namespace = "staging"
-		}
+		detectedNamespace = "staging"
 	case "acceptance":
 		repoConfig.DockerRepositoryName = repoConfig.DockerRepository.ProductionRepositoryName
 		repoConfig.ClusterName = "production"
-		if repoConfig.Namespace == "" {
-			repoConfig.Namespace = "acceptance"
-		}
+		detectedNamespace = "acceptance"
 	default:
 		repoConfig.DockerRepositoryName = repoConfig.DockerRepository.DevelopmentRepositoryName
 		repoConfig.ClusterName = "development"
-		if repoConfig.Namespace == "" {
-			repoConfig.Namespace = "development"
-		}
+		detectedNamespace = "development"
 	}
 
 	repoConfig.ImageTag = fmt.Sprintf("%s-%s-%s",
@@ -119,6 +117,15 @@ func initRepoConfig(configFilePath string) repoConfigMap {
 	repoConfig.PWD, err = os.Getwd()
 
 	repoConfig.KubeAPIClientSet = setupKubeAPI()
+
+	// parse environment variables set in the branch variables
+	e.getEnvMapFromBranchVars(repoConfig)
+	repoConfig.EnvMap = e
+
+	// if the namespace has been overridden, update the used namespace
+	if e.getNamespace() != detectedNamespace {
+		repoConfig.Namespace = e.getNamespace()
+	}
 
 	return repoConfig
 }
@@ -142,4 +149,53 @@ func readFromPackageJSON() (string, string) {
 		os.Exit(1)
 	}
 	return packageJSONConfig.Name, packageJSONConfig.Version
+}
+
+func (e *envMap) getEnvMapFromBranchVars(r repoConfigMap) {
+
+	environmentToBranchMappings := map[string][]string{
+		"production":  []string{"production"},
+		"staging":     []string{"master", "staging"},
+		"development": []string{"else", "dev"},
+		"acceptance":  []string{"acceptance"},
+	}
+
+	headingToLookFor := environmentToBranchMappings[r.Namespace]
+	branchNameHeadings := r.Application.KubernetesTemplate.BranchVariables
+	re := regexp.MustCompile(fmt.Sprintf("(%s),?", strings.Join(headingToLookFor, "|")))
+
+	// Parse and add the global env vars
+	for _, envVar := range r.Application.KubernetesTemplate.GlobalVariables {
+		split := strings.Split(envVar, "=")
+		(*e)[split[0]] = split[1]
+	}
+
+	// Loop over the branch names we would match with
+	// loop over the un-split headings
+	for heading := range branchNameHeadings {
+		// splitBranches := strings.Split(heading, ",")
+		if re.MatchString(heading) {
+			for _, envVar := range branchNameHeadings[heading] {
+				split := strings.Split(envVar, "=")
+				(*e)[split[0]] = split[1]
+			}
+		}
+	}
+
+	namespace := r.Namespace
+	if v, ok := (*e)["NAMESPACE"]; ok {
+		namespace = v
+	}
+
+	// Include the template freebie variables
+	(*e)["KD_RELEASE_NAME"] = r.ReleaseName
+	(*e)["KD_APP_NAME"] = r.Application.Name + "-" + r.GitBranch
+	(*e)["KD_KUBERNETES_NAMESPACE"] = namespace
+	(*e)["KD_GIT_BRANCH"] = r.GitBranch
+	(*e)["KD_IMAGE_FULL_PATH"] = r.ImageFullPath
+	(*e)["KD_IMAGE_TAG"] = r.ImageTag
+}
+
+func (e *envMap) getNamespace() string {
+	return (*e)["KD_KUBERNETES_NAMESPACE"]
 }

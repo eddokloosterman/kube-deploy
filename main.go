@@ -42,10 +42,11 @@ func main() {
 	Repository name: %s
 	Current branch: %s
 	HEAD hash: %s
-			
+	Namespace: %s
+
 => That means we're dealing with the image tag:
 	%s
-`, repoConfig.Application.Name, repoConfig.GitBranch, repoConfig.BuildID, repoConfig.ImageFullPath)
+`, repoConfig.Application.Name, repoConfig.GitBranch, repoConfig.BuildID, repoConfig.Namespace, repoConfig.ImageFullPath)
 	}
 
 	// args has to have at least length 2, since the first element is the executable name
