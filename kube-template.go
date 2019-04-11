@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"text/template"
+
+	"github.com/mycujoo/kube-deploy/cli"
 )
 
 // Returns a list of the filenames of the filled-out templates
@@ -16,6 +18,7 @@ func kubeMakeTemplates() []string {
 	templateFiles, err := ioutil.ReadDir(repoConfig.Application.PathToKubernetesFiles)
 	if err != nil {
 		fmt.Println("=> Unable to get list of kubernetes files.")
+		os.Exit(1)
 	}
 
 	var filePaths []string
@@ -75,7 +78,7 @@ func runConsulTemplate(filename string) string {
 		}
 	}
 
-	output, exitCode := getCommandOutputAndExitCode("consul-template", consulTemplateArgs)
+	output, exitCode := cli.GetCommandOutputAndExitCode("consul-template", consulTemplateArgs)
 	if exitCode != 0 {
 		fmt.Println("=> Oh no, looks like consul-template failed!")
 		os.Exit(1)

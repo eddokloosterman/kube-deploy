@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"encoding/json"
@@ -10,16 +10,17 @@ import (
 
 	"gopkg.in/yaml.v2"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/mycujoo/kube-deploy/cli"
 )
 
-type envMap map[string]string
-
-// repoConfigMap : hash of the YAML data from project's deploy.yaml
-type repoConfigMap struct {
+// RepoConfigMap : hash of the YAML data from project's deploy.yaml
+type RepoConfigMap struct {
 	DockerRepository struct {
-		DevelopmentRepositoryName string `yaml:"developmentRepositoryName"`
-		ProductionRepositoryName  string `yaml:"productionRepositoryName"`
-		RegistryRoot              string `yaml:"registryRoot"`
+		DevelopmentRepositoryName string            `yaml:"developmentRepositoryName"`
+		ProductionRepositoryName  string            `yaml:"productionRepositoryName"`
+		BranchRepositoryName      map[string]string `yaml:"branchRepositoryName"`
+		RegistryRoot              string            `yaml:"registryRoot"`
 	} `yaml:"dockerRepository"`
 	Application struct {
 		PackageJSON           bool   `yaml:"packageJSON"`
@@ -35,8 +36,10 @@ type repoConfigMap struct {
 	ClusterName          string // 'production' or 'development' - 'staging' should use the production cluster
 	Namespace            string
 	GitBranch            string
-	BuildID              string
+	GitSHA               string
+	ImageName            string
 	ImageTag             string
+	ImageCachePath       string
 	ImageFullPath        string `yaml:"imageFullPath"`
 	PWD                  string
 	ReleaseName          string
@@ -54,7 +57,7 @@ type testConfigMap struct {
 	Commands      []string `yaml:"commands"`
 }
 
-func initRepoConfig(configFilePath string) repoConfigMap {
+func InitRepoConfig(configFilePath string) RepoConfigMap {
 
 	configFile, err := ioutil.ReadFile(configFilePath)
 	if err != nil {
@@ -62,17 +65,17 @@ func initRepoConfig(configFilePath string) repoConfigMap {
 		os.Exit(1)
 	}
 
-	repoConfig := repoConfigMap{}
+	repoConfig := RepoConfigMap{}
 	err = yaml.Unmarshal(configFile, &repoConfig)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed parsing YAML repo config file:", err)
 		os.Exit(1)
 	}
 
-	repoConfig.GitBranch = strings.TrimSuffix(getCommandOutput("git", "rev-parse --abbrev-ref HEAD"), "\n")
+	repoConfig.GitBranch = strings.TrimSuffix(cli.GetCommandOutput("git", "rev-parse --abbrev-ref HEAD"), "\n")
 	invalidDockertagCharRegex := regexp.MustCompile(`([^a-z|A-Z|0-9|\-|_|\.])`)
 	repoConfig.GitBranch = invalidDockertagCharRegex.ReplaceAllString(repoConfig.GitBranch, "-")
-	repoConfig.BuildID = strings.TrimSuffix(getCommandOutput("git", "rev-parse --verify --short HEAD"), "\n")
+	repoConfig.GitSHA = strings.TrimSuffix(cli.GetCommandOutput("git", "rev-parse --verify --short HEAD"), "\n")
 
 	if repoConfig.Application.PackageJSON {
 		repoConfig.Application.Name, repoConfig.Application.Version = readFromPackageJSON()
@@ -94,29 +97,45 @@ func initRepoConfig(configFilePath string) repoConfigMap {
 		repoConfig.DockerRepositoryName = repoConfig.DockerRepository.ProductionRepositoryName
 		repoConfig.ClusterName = "production"
 		detectedNamespace = "acceptance"
+	case "preview":
+		repoConfig.DockerRepositoryName = repoConfig.DockerRepository.ProductionRepositoryName
+		repoConfig.ClusterName = "production"
+		detectedNamespace = "preview"
 	default:
 		repoConfig.DockerRepositoryName = repoConfig.DockerRepository.DevelopmentRepositoryName
 		repoConfig.ClusterName = "development"
 		detectedNamespace = "development"
 	}
 
+	for heading := range repoConfig.DockerRepository.BranchRepositoryName {
+		if repoConfig.GitBranch == heading {
+			repoConfig.DockerRepositoryName = repoConfig.DockerRepository.BranchRepositoryName[heading]
+		}
+	}
+
 	repoConfig.ImageTag = fmt.Sprintf("%s-%s-%s",
 		repoConfig.Application.Version,
 		fmt.Sprintf("%.25s", repoConfig.GitBranch),
-		repoConfig.BuildID)
+		repoConfig.GitSHA)
+
+	cacheTag := fmt.Sprintf("%s-cache",
+		repoConfig.Application.Version)
 
 	if repoConfig.ImageFullPath == "" { // if the path was not already provided in the deploy.yaml
 		if repoConfig.DockerRepository.RegistryRoot != "" {
-			repoConfig.ImageFullPath = fmt.Sprintf("%s/%s/%s:%s", repoConfig.DockerRepository.RegistryRoot, repoConfig.DockerRepositoryName, repoConfig.Application.Name, repoConfig.ImageTag)
+			repoConfig.ImageName = fmt.Sprintf("%s/%s/%s", repoConfig.DockerRepository.RegistryRoot, repoConfig.DockerRepositoryName, repoConfig.Application.Name)
 		} else { // For DockerHub images, no RegistryRoot is needed
-			repoConfig.ImageFullPath = fmt.Sprintf("%s/%s:%s", repoConfig.DockerRepositoryName, repoConfig.Application.Name, repoConfig.ImageTag)
+			repoConfig.ImageName = fmt.Sprintf("%s/%s", repoConfig.DockerRepositoryName, repoConfig.Application.Name)
 		}
 	}
+
+	repoConfig.ImageFullPath = fmt.Sprintf("%s:%s", repoConfig.ImageName, repoConfig.ImageTag)
+	repoConfig.ImageCachePath = fmt.Sprintf("%s:%s", repoConfig.ImageName, cacheTag)
 
 	repoConfig.ReleaseName = fmt.Sprintf("%.25s-%s", repoConfig.Application.Name, repoConfig.ImageTag)
 	repoConfig.PWD, err = os.Getwd()
 
-	repoConfig.KubeAPIClientSet = setupKubeAPI()
+	repoConfig.KubeAPIClientSet = kubeapi.Setup(repoConfig.Namespace)
 
 	// parse environment variables set in the branch variables
 	e.getEnvMapFromBranchVars(repoConfig)
@@ -158,6 +177,7 @@ func (e *envMap) getEnvMapFromBranchVars(r repoConfigMap) {
 		"staging":     []string{"master", "staging"},
 		"development": []string{"else", "dev"},
 		"acceptance":  []string{"acceptance"},
+		"preview":     []string{"preview"},
 	}
 
 	headingToLookFor := environmentToBranchMappings[r.Namespace]
@@ -192,8 +212,10 @@ func (e *envMap) getEnvMapFromBranchVars(r repoConfigMap) {
 	(*e)["KD_APP_NAME"] = r.Application.Name + "-" + r.GitBranch
 	(*e)["KD_KUBERNETES_NAMESPACE"] = namespace
 	(*e)["KD_GIT_BRANCH"] = r.GitBranch
+	(*e)["KD_GIT_SHA"] = r.GitSHA
 	(*e)["KD_IMAGE_FULL_PATH"] = r.ImageFullPath
 	(*e)["KD_IMAGE_TAG"] = r.ImageTag
+
 }
 
 func (e *envMap) getNamespace() string {

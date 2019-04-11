@@ -1,4 +1,4 @@
-package main
+package build
 
 import (
 	"encoding/json"
@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/mycujoo/kube-deploy/cli"
 )
 
 type gcloudDockerTag struct {
@@ -17,13 +19,13 @@ type gcloudDockerTag struct {
 	}
 }
 
-func dockerListTags() {
-	if !strings.Contains(repoConfig.DockerRepository.RegistryRoot, "gcr.io") {
+func DockerListTags(imageName string) {
+	if !strings.Contains(imageName, "gcr.io") {
 		fmt.Println("=> Sorry, the 'list-tags' feature only works with Google Cloud Registry.")
 		os.Exit(1)
 	}
 
-	jsonTags := getCommandOutput("gcloud", fmt.Sprintf("container images list-tags --format=json eu.gcr.io/mycujoo-development/mycujoo-thumbs")) // %s", repoConfig.ImagePath))
+	jsonTags := cli.GetCommandOutput("gcloud", fmt.Sprintf("container images list-tags --format=json %s", imageName))
 	decodedTags := []gcloudDockerTag{}
 
 	if err := json.Unmarshal([]byte(jsonTags), &decodedTags); err != nil {
@@ -42,8 +44,8 @@ func dockerListTags() {
 	w.Flush()
 }
 
-func dockerImageExistsLocal() bool {
-	exitCode := getCommandExitCode("docker", fmt.Sprintf("inspect %s", repoConfig.ImageFullPath))
+func DockerImageExistsLocal(imageName string) bool {
+	exitCode := cli.GetCommandExitCode("docker", fmt.Sprintf("inspect %s", imageName))
 
 	if exitCode != 0 {
 		return false
@@ -51,8 +53,8 @@ func dockerImageExistsLocal() bool {
 	return true
 }
 
-func dockerImageExistsRemote() bool {
-	exitCode := getCommandExitCode("docker", fmt.Sprintf("pull %s", repoConfig.ImageFullPath))
+func DockerImageExistsRemote(imageName string) bool {
+	exitCode := cli.GetCommandExitCode("docker", fmt.Sprintf("pull %s", imageName))
 
 	if exitCode != 0 {
 		return false
@@ -60,7 +62,7 @@ func dockerImageExistsRemote() bool {
 	return true
 }
 
-func dockerAmLoggedIn() bool {
+func DockerAmLoggedIn(registryRoot string) bool {
 
 	dockerAuthFile, err := ioutil.ReadFile(os.Getenv("HOME") + "/.docker/config.json")
 	if err != nil {
@@ -89,11 +91,11 @@ func dockerAmLoggedIn() bool {
 	}
 
 	var authToLookFor string
-	if repoConfig.DockerRepository.RegistryRoot == "" {
+	if registryRoot == "" {
 		// If no RegistryRoot is specified, look for dockerhub details
 		authToLookFor = "index.docker.io/v1/"
 	} else {
-		authToLookFor = repoConfig.DockerRepository.RegistryRoot
+		authToLookFor = registryRoot
 	}
 
 	for _, remoteName := range loggedInRemotes {
@@ -101,6 +103,12 @@ func dockerAmLoggedIn() bool {
 			return true
 		}
 	}
+
+	fmt.Println("=> Found following authenticated docker remotes:")
+	for _, remoteName := range loggedInRemotes {
+		fmt.Printf("      %s\n", remoteName)
+	}
+	fmt.Printf("=> We are looking for: %s", authToLookFor)
 
 	return false
 }

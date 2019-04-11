@@ -2,6 +2,16 @@
 
 Welcome to kube-deploy, an opinionated but friendly deployment tool for Kubernetes!
 
+## Overview
+
+* Easy developer-focused command-line tool.
+* Utilizes templating kubernetes consul-template and vault to create secure and complex deployments that fit almost any scenerio.
+* Canary deployments, easy rollback and scaling
+* Support for multiple clusters
+* Works for teams of any size
+
+Learn more about `kube-deploy` with [this video](https://youtu.be/PB5W30ScIL8?t=5m40s) from a recent meetup talk in Amsterdam.
+
 ## Commands 
 
 ### Context
@@ -55,6 +65,13 @@ The primary workflow of `kube-deploy` involves the following steps:
     - The `staging` environment is part of the `production` Kubernetes cluster (but lives in a Namespace called `staging`)
     - The `acceptance` environment is part of the `production` Kubernetes cluster (but lives in a Namespace called `acceptance`)
     - Only `Deployment` types are supported currently (not `StatefulSet`, `DaemonSet`, `Jobs`, etc)
+
+## Host Dependencies
+
+The following applications are called by `kube-deploy` as subcommands (`os/exec`), and are therefore required:
+- [`consul-template`](https://github.com/hashicorp/consul-template)
+- [`vault`](https://www.vaultproject.io/)
+- [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
 
 ## Configuration
 

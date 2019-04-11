@@ -9,11 +9,14 @@ import (
 	"fmt"
 	"os"
 	// "os/user"
+	"github.com/mycujoo/kube-deploy/build"
+	"github.com/mycujoo/kube-deploy/cli"
+	"github.com/mycujoo/kube-deploy/config"
 	"github.com/simonleung8/flags"
 )
 
 // var userConfig userConfigMap
-var repoConfig repoConfigMap
+var repoConfig config.RepoConfigMap
 var reader *bufio.Reader
 var osstdout *os.File
 
@@ -30,15 +33,16 @@ func main() {
 	}
 	// TODO: for some reason, on a linux machine, if any command other than 'curl' is executed first, all
 	//		 subcommands fail - but sometimes, the first-run after 'go build' works. Who knows...
-	if exitCode := getCommandExitCode("curl", "-s --connect-timeout 3 https://ifconfig.io"); exitCode != 0 {
+	if exitCode := cli.GetCommandExitCode("curl", "-s --connect-timeout 3 https://google.com"); exitCode != 0 {
 		fmt.Println("=> Uh oh, looks like you're not connected to the internet (or maybe it's just too slow).")
 		os.Exit(1)
 	}
 
 	if !runFlags.Bool("test-only") {
 		fmt.Println("=> First, I'm going to read the repo configuration file.")
-		repoConfig = initRepoConfig(fmt.Sprintf("%s/deploy.yaml", pwd))
+		repoConfig = config.InitRepoConfig(fmt.Sprintf("%s/deploy.yaml", pwd))
 		fmt.Printf(`=> I found the following data:
+	Registry root: %s
 	Repository name: %s
 	Current branch: %s
 	HEAD hash: %s
@@ -46,7 +50,7 @@ func main() {
 
 => That means we're dealing with the image tag:
 	%s
-`, repoConfig.Application.Name, repoConfig.GitBranch, repoConfig.BuildID, repoConfig.Namespace, repoConfig.ImageFullPath)
+`, repoConfig.DockerRepository.RegistryRoot, repoConfig.Application.Name, repoConfig.GitBranch, repoConfig.GitSHA, repoConfig.ImageFullPath)
 	}
 
 	// args has to have at least length 2, since the first element is the executable name
@@ -61,15 +65,31 @@ func main() {
 			fmt.Fprintln(osstdout, repoConfig.Namespace)
 		case "cluster":
 			fmt.Fprintln(osstdout, repoConfig.ClusterName)
+		case "release":
+			fmt.Fprintln(osstdout, repoConfig.ReleaseName)
 
 		case "build":
-			makeAndPushBuild()
+			build.MakeAndPushBuild(
+				runFlags.Bool("force-push-image"),
+				runFlags.Bool("override-dirty-workdir"),
+				runFlags.Bool("keep-test-container"),
+				repoConfig,
+			)
 		case "make":
-			makeAndPushBuild()
+			build.MakeAndPushBuild(
+				runFlags.Bool("force-push-image"),
+				runFlags.Bool("override-dirty-workdir"),
+				runFlags.Bool("keep-test-container"),
+				repoConfig,
+			)
 		case "test":
-			makeAndTestBuild()
+			build.MakeAndTestBuild(
+				runFlags.Bool("override-dirty-workdir"),
+				runFlags.Bool("keep-test-container"),
+				repoConfig,
+			)
 		case "testonly":
-			runBuildTests()
+			build.RunBuildTests(runFlags.Bool("keep-test-container"), repoConfig)
 
 		case "start-rollout":
 			kubeStartRollout()
@@ -84,24 +104,27 @@ func main() {
 			fmt.Println("The files can be found at: ")
 			fmt.Fprint(osstdout, strings.Join(kubeMakeTemplates(), "\n"))
 
+		case "remove":
+			kubeRemove()
+
 		case "active-deployments":
 			kubeListDeployments()
 		case "list-tags":
-			dockerListTags()
+			build.DockerListTags(repoConfig.ImageName)
 
 		case "status":
-			if status := isLocked(); status == false {
+			if status := cli.IsLocked(repoConfig.Application.Name); status == false {
 				fmt.Print("=> No rollout in progress for this repo and branch.\n\n")
 			}
 
 		case "lock":
-			writeLockFile(repoConfig.Application.Name, "manually blocked rollouts for "+repoConfig.Application.Name)
+			cli.WriteLockFile(repoConfig.Application.Name, "manually blocked rollouts for "+repoConfig.Application.Name)
 		case "unlock":
-			deleteLockFile(repoConfig.Application.Name)
+			cli.DeleteLockFile(repoConfig.Application.Name)
 		case "lock-all":
-			writeLockFile("all", "manually blocked all rollouts")
+			cli.WriteLockFile("all", "manually blocked all rollouts")
 		case "unlock-all":
-			deleteLockFile("all")
+			cli.DeleteLockFile("all")
 		default:
 			{
 				fmt.Println("=> Uh oh - that command isn't recongised. Please enter a valid command. Do you need some help?")
@@ -154,7 +177,7 @@ func parseFlags() {
 	runFlags.NewBoolFlag("quiet", "q", "Silences as much output as possible.")
 	runFlags.NewBoolFlag("keep-kubernetes-template-files", "", "Leaves the templated-out kubernetes files under the directory '.kubedeploy-temp'.")
 	if err := runFlags.Parse(os.Args...); err != nil {
-		fmt.Println("\n=> Oh no, I don't know what to do with those command line flags. Sorry...\n")
+		fmt.Println("\n=> Oh no, I don't know what to do with those command line flags. Sorry...")
 		fmt.Println(runFlags.ShowUsage(4))
 		os.Exit(1)
 	}
