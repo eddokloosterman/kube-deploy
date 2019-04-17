@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"regexp"
 	"strings"
 	"text/template"
 
@@ -55,59 +54,16 @@ func runConsulTemplate(filename string) string {
 	consulTemplateArgs := fmt.Sprintf("%s -template %s -once -dry", vaultAddr, filename)
 
 	// the map which will contain all environment variables to be set before running consul-template
-	envMap := make(map[string]string)
-
-	// Include the template freebie variables
-	envMap["KD_RELEASE_NAME"] = repoConfig.ReleaseName
-	envMap["KD_APP_NAME"] = repoConfig.Application.Name + "-" + repoConfig.GitBranch
-	envMap["KD_KUBERNETES_NAMESPACE"] = repoConfig.Namespace
-	envMap["KD_GIT_BRANCH"] = repoConfig.GitBranch
-	envMap["KD_GIT_SHA"] = repoConfig.GitSHA
-	envMap["KD_IMAGE_FULL_PATH"] = repoConfig.ImageFullPath
-	envMap["KD_IMAGE_TAG"] = repoConfig.ImageTag
-
-	environmentToBranchMappings := map[string][]string{
-		"production":  []string{"production"},
-		"staging":     []string{"master", "staging"},
-		"development": []string{"else", "dev"},
-		"acceptance":  []string{"acceptance"},
-		"preview":     []string{"preview"},
-	}
-
-	headingToLookFor := environmentToBranchMappings[repoConfig.Namespace]
-	branchNameHeadings := repoConfig.Application.KubernetesTemplate.BranchVariables
-	re := regexp.MustCompile(fmt.Sprintf("(%s),?", strings.Join(headingToLookFor, "|")))
-
-	// Parse and add the global env vars
-	for _, envVar := range repoConfig.Application.KubernetesTemplate.GlobalVariables {
-		split := strings.Split(envVar, "=")
-		envMap[split[0]] = split[1]
-	}
 
 	if runFlags.Bool("debug") {
-		fmt.Println("=> Here's the regex I'm going to use for matching branches (templating process): ", re.String())
-	}
-	// Loop over the branch names we would match with
-	// loop over the un-split headings
-	for heading := range branchNameHeadings {
-		// splitBranches := strings.Split(heading, ",")
-		if re.MatchString(heading) {
-			for _, envVar := range branchNameHeadings[heading] {
-				split := strings.Split(envVar, "=")
-				envMap[split[0]] = split[1]
-			}
-		}
-	}
-
-	if runFlags.Bool("debug") {
-		fmt.Println(envMap)
+		fmt.Println(repoConfig.EnvMap)
 	}
 
 	// Add the variables to the environment, doing any inline substitutions
-	for key, value := range envMap {
+	for key, value := range repoConfig.EnvMap {
 		var envVarBuf bytes.Buffer
 		tmplVar, err := template.New("EnvVar: " + key).Parse(value)
-		err = tmplVar.Execute(&envVarBuf, envMap)
+		err = tmplVar.Execute(&envVarBuf, repoConfig.EnvMap)
 		if err != nil {
 			fmt.Println("=> Uh oh, failed to do a substitution in one of your template variables.")
 			fmt.Println(err)

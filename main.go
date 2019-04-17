@@ -5,9 +5,11 @@ import (
 	"io/ioutil"
 	"strconv"
 	"strings"
+
 	// "flag"
 	"fmt"
 	"os"
+
 	// "os/user"
 	"github.com/mycujoo/kube-deploy/build"
 	"github.com/mycujoo/kube-deploy/cli"
@@ -46,10 +48,11 @@ func main() {
 	Repository name: %s
 	Current branch: %s
 	HEAD hash: %s
-			
+	Namespace: %s
+
 => That means we're dealing with the image tag:
 	%s
-`, repoConfig.DockerRepository.RegistryRoot, repoConfig.Application.Name, repoConfig.GitBranch, repoConfig.GitSHA, repoConfig.ImageFullPath)
+`, repoConfig.DockerRepository.RegistryRoot, repoConfig.Application.Name, repoConfig.GitBranch, repoConfig.GitSHA, repoConfig.Namespace, repoConfig.ImageFullPath)
 	}
 
 	// args has to have at least length 2, since the first element is the executable name
