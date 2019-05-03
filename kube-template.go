@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/mycujoo/kube-deploy/cli"
 	"io/ioutil"
+	"log"
 	"os"
 	"strings"
 )
@@ -14,8 +15,7 @@ func kubeMakeTemplates() []string {
 
 	templateFiles, err := ioutil.ReadDir(repoConfig.Application.PathToKubernetesFiles)
 	if err != nil {
-		fmt.Println("=> Unable to get list of kubernetes files.")
-		os.Exit(1)
+		log.Fatal("=> Unable to get list of kubernetes files.")
 	}
 
 	var filePaths []string
@@ -69,8 +69,7 @@ func runConsulTemplate(filename string) string {
 
 	output, exitCode := cli.GetCommandOutputAndExitCode("consul-template", consulTemplateArgs)
 	if exitCode != 0 {
-		fmt.Println("=> Oh no, looks like consul-template failed!")
-		os.Exit(1)
+		log.Fatal("=> Oh no, looks like consul-template failed!")
 	}
 
 	return strings.Join(strings.Split(output, "\n")[1:], "\n")

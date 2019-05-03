@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"sort"
 	"strconv"
@@ -16,6 +17,8 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 )
+
+const rolloutStatusFormat = "rollout status --namespace=%s deployment/%s"
 
 func kubeStartRollout() {
 
@@ -59,9 +62,8 @@ func kubeStartRollout() {
 	for _, f := range kubeMakeTemplates() {
 		exitCode := cli.StreamAndGetCommandExitCode("kubectl", fmt.Sprintf("apply -f %s", f))
 		if exitCode != 0 {
-			fmt.Println("=> Uh oh, there was an problem during templating. You should fix this first.")
 			kubeRemoveTemplates()
-			os.Exit(1)
+			log.Fatal("=> Uh oh, there was an problem during templating. You should fix this first.")
 		}
 	}
 	kubeRemoveTemplates()
@@ -82,7 +84,7 @@ func kubeStartRollout() {
 	})
 
 	// Make sure first pod gets started
-	cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf("rollout status --namespace=%s deployment/%s", repoConfig.EnvVarsMap.GetNameSpace(), repoConfig.ReleaseName))
+	cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf(rolloutStatusFormat, repoConfig.EnvVarsMap.GetNameSpace(), repoConfig.ReleaseName))
 
 	if !skipCanary {
 		// Pause to watch monitors and make sure that the 1 pod deploy was successful
@@ -99,7 +101,7 @@ func kubeStartRollout() {
 		thisDeployment = kubeapi.UpdateDeployment(repoConfig.ReleaseName, func(deployment *v1beta1.Deployment) {
 			deployment.Spec.Replicas = &desiredPods
 		})
-		cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf("rollout status --namespace=%s deployment/%s", repoConfig.EnvVarsMap.GetNameSpace(), repoConfig.ReleaseName))
+		cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf(rolloutStatusFormat, repoConfig.EnvVarsMap.GetNameSpace(), repoConfig.ReleaseName))
 
 		if !skipCanary {
 			fmt.Println("\n=> Now, let's wait for 5 minutes, watch the monitors, and let everything simmer to make sure it looks good.")
@@ -116,7 +118,7 @@ func kubeStartRollout() {
 		mostRecentRelease = *kubeapi.UpdateDeployment(mostRecentRelease.Name, func(deployment *v1beta1.Deployment) {
 			deployment.Spec.Replicas = new(int32) // new() returns default value, which is 0 for int32
 		})
-		cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf("rollout status --namespace=%s deployment/%s", repoConfig.EnvVarsMap.GetNameSpace(), mostRecentRelease.Name))
+		cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf(rolloutStatusFormat, repoConfig.EnvVarsMap.GetNameSpace(), mostRecentRelease.Name))
 
 		if !skipCanary {
 			fmt.Println("=> Now, let's wait for another 5 minutes, watch the monitors again, amd make sure we're confident with the new deployment.")
@@ -170,7 +172,7 @@ func safeBailOut(thisDeployment *v1beta1.Deployment, mostRecentRelease *v1beta1.
 			deployment.Labels["kubedeploy-is-live"] = "true"
 			delete(deployment.Labels, "kubedeploy-rollback-target")
 		})
-		cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf("rollout status --namespace=%s deployment/%s", repoConfig.EnvVarsMap.GetNameSpace(), mostRecentRelease.Name))
+		cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf(rolloutStatusFormat, repoConfig.EnvVarsMap.GetNameSpace(), mostRecentRelease.Name))
 
 		fmt.Println("=> Deleting the deployment we created...")
 		kubeapi.DeleteDeployment(thisDeployment)
@@ -181,8 +183,7 @@ func safeBailOut(thisDeployment *v1beta1.Deployment, mostRecentRelease *v1beta1.
 
 	kubeRemoveTemplates()
 	cli.UnlockAfterRollout(repoConfig.Application.Name)
-	fmt.Print("=> Sorry it didn't work out - better luck next time!\n\n")
-	os.Exit(0)
+	log.Fatal("=> Sorry it didn't work out - better luck next time!\n\n")
 }
 
 func kubeRollingRestart() {
@@ -200,7 +201,7 @@ func kubeRollingRestart() {
 	kubeapi.UpdateDeployment(isLive.Name, func(deployment *v1beta1.Deployment) {
 		deployment.Spec.Template.Labels["kubedeploy-last-rolling-restart"] = strconv.FormatInt(time.Now().Unix(), 10)
 	})
-	cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf("rollout status --namespace=%s deployment/%s", repoConfig.EnvVarsMap.GetNameSpace(), isLive.Name))
+	cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf(rolloutStatusFormat, repoConfig.EnvVarsMap.GetNameSpace(), isLive.Name))
 
 	fmt.Printf("\n=> All pods have been recreated.\n\n")
 }
@@ -236,7 +237,7 @@ func kubeInstantRollback() {
 		deployment.Labels["kubedeploy-is-live"] = "true"
 		delete(deployment.Labels, "kubedeploy-rollback-target")
 	})
-	cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf("rollout status --namespace=%s deployment/%s", repoConfig.EnvVarsMap.GetNameSpace(), rollbackTarget.Name))
+	cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf(rolloutStatusFormat, repoConfig.EnvVarsMap.GetNameSpace(), rollbackTarget.Name))
 
 	if !runFlags.Bool("force") && !runFlags.Bool("no-canary") {
 		fmt.Println("\n=> Wait for one minute to make sure that the old pods came up correctly.")
@@ -251,7 +252,7 @@ func kubeInstantRollback() {
 	})
 
 	fmt.Println("=> Wait for the old pods to scale down to 0.")
-	cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf("rollout status --namespace=%s deployment/%s", repoConfig.EnvVarsMap.GetNameSpace(), rollbackTarget.Name))
+	cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf(rolloutStatusFormat, repoConfig.EnvVarsMap.GetNameSpace(), rollbackTarget.Name))
 
 	fmt.Printf("=> The deployment has been successfully rolled back to: %s.\n", rollbackTarget.Name)
 }
@@ -265,7 +266,7 @@ func kubeScaleDeployment(replicas int32) {
 		kubeapi.UpdateDeployment(liveDeployment.Name, func(deployment *v1beta1.Deployment) {
 			deployment.Spec.Replicas = &replicas
 		})
-		cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf("rollout status --namespace=%s deployment/%s", repoConfig.EnvVarsMap.GetNameSpace(), repoConfig.ReleaseName))
+		cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf(rolloutStatusFormat, repoConfig.EnvVarsMap.GetNameSpace(), repoConfig.ReleaseName))
 		fmt.Printf("=> Finished scaling to %d replica(s).\n", replicas)
 	} else {
 		fmt.Println("=> Whoah, there's more than one 'is_live' deployment. You should fix that first.")
@@ -300,8 +301,7 @@ func kubeRemove() {
 			ingress := kubeObject.(*v1beta1.Ingress)
 			kubeapi.DeleteIngress(ingress)
 		default:
-			fmt.Println("=> Unable to delete Kubernetes object of type: ", o)
-			os.Exit(1)
+			log.Fatalf("=> Unable to delete Kubernetes object of type: ", o)
 		}
 	}
 

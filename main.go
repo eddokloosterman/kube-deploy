@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"io/ioutil"
+	"log"
 	"strconv"
 	"strings"
 
@@ -36,8 +37,7 @@ func main() {
 	// TODO: for some reason, on a linux machine, if any command other than 'curl' is executed first, all
 	//		 subcommands fail - but sometimes, the first-run after 'go build' works. Who knows...
 	if exitCode := cli.GetCommandExitCode("curl", "-s --connect-timeout 3 https://google.com"); exitCode != 0 {
-		fmt.Println("=> Uh oh, looks like you're not connected to the internet (or maybe it's just too slow).")
-		os.Exit(1)
+		log.Fatal("=> Uh oh, looks like you're not connected to the internet (or maybe it's just too slow).")
 	}
 
 	if !runFlags.Bool("test-only") {
@@ -133,15 +133,13 @@ func main() {
 				fmt.Print("=> Press 'y' to show the help menu, anything else to exit.\n>>>  ")
 				pleaseHelpMe, _ := reader.ReadString('\n')
 				if pleaseHelpMe != "y\n" && pleaseHelpMe != "Y\n" {
-					fmt.Println("Better luck next time.")
-					os.Exit(0)
+					log.Fatal("Better luck next time.")
 				}
 				showHelp()
 			}
 		}
 	} else {
-		fmt.Println("You'll need to add a command.")
-		os.Exit(0)
+		log.Fatal("You'll need to add a command.")
 	}
 }
 
@@ -179,9 +177,8 @@ func parseFlags() {
 	runFlags.NewBoolFlag("quiet", "q", "Silences as much output as possible.")
 	runFlags.NewBoolFlag("keep-kubernetes-template-files", "", "Leaves the templated-out kubernetes files under the directory '.kubedeploy-temp'.")
 	if err := runFlags.Parse(os.Args...); err != nil {
-		fmt.Println("\n=> Oh no, I don't know what to do with those command line flags. Sorry...")
-		fmt.Println(runFlags.ShowUsage(4))
-		os.Exit(1)
+		log.Println("\n=> Oh no, I don't know what to do with those command line flags. Sorry...")
+		log.Fatal(runFlags.ShowUsage(4))
 	}
 	args = runFlags.Args()
 }
