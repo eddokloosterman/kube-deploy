@@ -52,7 +52,7 @@ func main() {
 
 => That means we're dealing with the image tag:
 	%s
-`, repoConfig.DockerRepository.RegistryRoot, repoConfig.Application.Name, repoConfig.GitBranch, repoConfig.GitSHA, repoConfig.Namespace, repoConfig.ImageFullPath)
+`, repoConfig.DockerRepository.RegistryRoot, repoConfig.Application.Name, repoConfig.GitBranch, repoConfig.GitSHA, repoConfig.EnvVarsMap.GetNameSpace(), repoConfig.ImageFullPath)
 	}
 
 	// args has to have at least length 2, since the first element is the executable name
@@ -64,7 +64,7 @@ func main() {
 		case "name":
 			fmt.Fprintln(osstdout, repoConfig.ImageFullPath)
 		case "environment":
-			fmt.Fprintln(osstdout, repoConfig.Namespace)
+			fmt.Fprintln(osstdout, repoConfig.EnvVarsMap.GetNameSpace())
 		case "cluster":
 			fmt.Fprintln(osstdout, repoConfig.ClusterName)
 		case "release":

@@ -1,14 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
+	"github.com/mycujoo/kube-deploy/cli"
 	"io/ioutil"
 	"os"
 	"strings"
-	"text/template"
-
-	"github.com/mycujoo/kube-deploy/cli"
 )
 
 // Returns a list of the filenames of the filled-out templates
@@ -49,27 +46,19 @@ func runConsulTemplate(filename string) string {
 	vaultAddr := os.Getenv("VAULT_ADDR")
 	if vaultAddr != "" {
 		vaultAddr = fmt.Sprintf("--vault-renew-token=false --vault-retry=false --vault-addr %s", vaultAddr)
-		os.Setenv("SECRETS_LOCATION", repoConfig.Namespace)
+		os.Setenv("SECRETS_LOCATION", repoConfig.EnvVarsMap.GetNameSpace())
 	}
 	consulTemplateArgs := fmt.Sprintf("%s -template %s -once -dry", vaultAddr, filename)
 
 	// the map which will contain all environment variables to be set before running consul-template
 
 	if runFlags.Bool("debug") {
-		fmt.Println(repoConfig.EnvMap)
+		fmt.Println(repoConfig.EnvVarsMap)
 	}
 
-	// Add the variables to the environment, doing any inline substitutions
-	for key, value := range repoConfig.EnvMap {
-		var envVarBuf bytes.Buffer
-		tmplVar, err := template.New("EnvVar: " + key).Parse(value)
-		err = tmplVar.Execute(&envVarBuf, repoConfig.EnvMap)
-		if err != nil {
-			fmt.Println("=> Uh oh, failed to do a substitution in one of your template variables.")
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		os.Setenv(key, envVarBuf.String())
+	// Add the variables to the environment
+	for key, value := range repoConfig.EnvVarsMap {
+		os.Setenv(key, value)
 	}
 
 	if runFlags.Bool("debug") {
