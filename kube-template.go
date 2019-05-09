@@ -1,15 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"regexp"
-	"strings"
-	"text/template"
-
 	"github.com/mycujoo/kube-deploy/cli"
+	"io/ioutil"
+	"log"
+	"os"
+	"strings"
 )
 
 // Returns a list of the filenames of the filled-out templates
@@ -18,8 +15,7 @@ func kubeMakeTemplates() []string {
 
 	templateFiles, err := ioutil.ReadDir(repoConfig.Application.PathToKubernetesFiles)
 	if err != nil {
-		fmt.Println("=> Unable to get list of kubernetes files.")
-		os.Exit(1)
+		log.Fatal("=> Unable to get list of kubernetes files.")
 	}
 
 	var filePaths []string
@@ -50,70 +46,19 @@ func runConsulTemplate(filename string) string {
 	vaultAddr := os.Getenv("VAULT_ADDR")
 	if vaultAddr != "" {
 		vaultAddr = fmt.Sprintf("--vault-renew-token=false --vault-retry=false --vault-addr %s", vaultAddr)
-		os.Setenv("SECRETS_LOCATION", repoConfig.Namespace)
+		os.Setenv("SECRETS_LOCATION", repoConfig.EnvVarsMap.GetNameSpace())
 	}
 	consulTemplateArgs := fmt.Sprintf("%s -template %s -once -dry", vaultAddr, filename)
 
 	// the map which will contain all environment variables to be set before running consul-template
-	envMap := make(map[string]string)
-
-	// Include the template freebie variables
-	envMap["KD_RELEASE_NAME"] = repoConfig.ReleaseName
-	envMap["KD_APP_NAME"] = repoConfig.Application.Name + "-" + repoConfig.GitBranch
-	envMap["KD_KUBERNETES_NAMESPACE"] = repoConfig.Namespace
-	envMap["KD_GIT_BRANCH"] = repoConfig.GitBranch
-	envMap["KD_GIT_SHA"] = repoConfig.GitSHA
-	envMap["KD_IMAGE_FULL_PATH"] = repoConfig.ImageFullPath
-	envMap["KD_IMAGE_TAG"] = repoConfig.ImageTag
-
-	environmentToBranchMappings := map[string][]string{
-		"production":  []string{"production"},
-		"staging":     []string{"master", "staging"},
-		"development": []string{"else", "dev"},
-		"acceptance":  []string{"acceptance"},
-		"preview":     []string{"preview"},
-	}
-
-	headingToLookFor := environmentToBranchMappings[repoConfig.Namespace]
-	branchNameHeadings := repoConfig.Application.KubernetesTemplate.BranchVariables
-	re := regexp.MustCompile(fmt.Sprintf("(%s),?", strings.Join(headingToLookFor, "|")))
-
-	// Parse and add the global env vars
-	for _, envVar := range repoConfig.Application.KubernetesTemplate.GlobalVariables {
-		split := strings.Split(envVar, "=")
-		envMap[split[0]] = split[1]
-	}
 
 	if runFlags.Bool("debug") {
-		fmt.Println("=> Here's the regex I'm going to use for matching branches (templating process): ", re.String())
-	}
-	// Loop over the branch names we would match with
-	// loop over the un-split headings
-	for heading := range branchNameHeadings {
-		// splitBranches := strings.Split(heading, ",")
-		if re.MatchString(heading) {
-			for _, envVar := range branchNameHeadings[heading] {
-				split := strings.Split(envVar, "=")
-				envMap[split[0]] = split[1]
-			}
-		}
+		fmt.Println(repoConfig.EnvVarsMap)
 	}
 
-	if runFlags.Bool("debug") {
-		fmt.Println(envMap)
-	}
-
-	// Add the variables to the environment, doing any inline substitutions
-	for key, value := range envMap {
-		var envVarBuf bytes.Buffer
-		tmplVar, err := template.New("EnvVar: " + key).Parse(value)
-		err = tmplVar.Execute(&envVarBuf, envMap)
-		if err != nil {
-			fmt.Println("=> Uh oh, failed to do a substitution in one of your template variables.")
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		os.Setenv(key, envVarBuf.String())
+	// Add the variables to the environment
+	for key, value := range repoConfig.EnvVarsMap {
+		os.Setenv(key, value)
 	}
 
 	if runFlags.Bool("debug") {
@@ -124,8 +69,7 @@ func runConsulTemplate(filename string) string {
 
 	output, exitCode := cli.GetCommandOutputAndExitCode("consul-template", consulTemplateArgs)
 	if exitCode != 0 {
-		fmt.Println("=> Oh no, looks like consul-template failed!")
-		os.Exit(1)
+		log.Fatal("=> Oh no, looks like consul-template failed!")
 	}
 
 	return strings.Join(strings.Split(output, "\n")[1:], "\n")

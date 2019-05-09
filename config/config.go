@@ -1,9 +1,11 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"text/template"
 	"os"
 	"regexp"
 	"strings"
@@ -15,24 +17,32 @@ import (
 	"github.com/mycujoo/kube-deploy/kube/api"
 )
 
+type envMapping map[string]string
+
+type DockerRepository struct {
+	DevelopmentRepositoryName string            `yaml:"developmentRepositoryName"`
+	ProductionRepositoryName  string            `yaml:"productionRepositoryName"`
+	BranchRepositoryName      map[string]string `yaml:"branchRepositoryName"`
+	RegistryRoot              string            `yaml:"registryRoot"`
+}
+
+type KubernetesTemplate struct {
+	GlobalVariables []string            `yaml:"globalVariables"`
+	BranchVariables map[string][]string `yaml:"branchVariables"`
+}
+
+type Application struct {
+	PackageJSON           bool   `yaml:"packageJSON"`
+	Name                  string `yaml:"name"`
+	Version               string `yaml:"version"`
+	PathToKubernetesFiles string `yaml:"pathToKubernetesFiles"`
+	KubernetesTemplate    KubernetesTemplate `yaml:"kubernetesTemplate"`
+}
+
 // RepoConfigMap : hash of the YAML data from project's deploy.yaml
 type RepoConfigMap struct {
-	DockerRepository struct {
-		DevelopmentRepositoryName string            `yaml:"developmentRepositoryName"`
-		ProductionRepositoryName  string            `yaml:"productionRepositoryName"`
-		BranchRepositoryName      map[string]string `yaml:"branchRepositoryName"`
-		RegistryRoot              string            `yaml:"registryRoot"`
-	} `yaml:"dockerRepository"`
-	Application struct {
-		PackageJSON           bool   `yaml:"packageJSON"`
-		Name                  string `yaml:"name"`
-		Version               string `yaml:"version"`
-		PathToKubernetesFiles string `yaml:"pathToKubernetesFiles"`
-		KubernetesTemplate    struct {
-			GlobalVariables []string            `yaml:"globalVariables"`
-			BranchVariables map[string][]string `yaml:"branchVariables"`
-		} `yaml:"kubernetesTemplate"`
-	} `yaml:"application"`
+	DockerRepository DockerRepository `yaml:"dockerRepository"`
+	Application Application `yaml:"application"`
 	DockerRepositoryName string
 	ClusterName          string // 'production' or 'development' - 'staging' should use the production cluster
 	Namespace            string
@@ -43,6 +53,7 @@ type RepoConfigMap struct {
 	ImageCachePath       string
 	ImageFullPath        string `yaml:"imageFullPath"`
 	PWD                  string
+	EnvVarsMap           envMapping
 	ReleaseName          string
 	KubeAPIClientSet     *kubernetes.Clientset
 	Tests                []testConfigMap `yaml:"tests"`
@@ -142,7 +153,12 @@ func InitRepoConfig(configFilePath string) RepoConfigMap {
 	repoConfig.ReleaseName = fmt.Sprintf("%.25s-%s", repoConfig.Application.Name, repoConfig.ImageTag)
 	repoConfig.PWD, err = os.Getwd()
 
-	repoConfig.KubeAPIClientSet = kubeapi.Setup(repoConfig.Namespace)
+	// parse environment variables set in the branch variables
+	envConfig := newEnvMappingFromRepoConfig(repoConfig)
+
+	repoConfig.Namespace = envConfig.GetNameSpace()
+	repoConfig.KubeAPIClientSet = kubeapi.Setup(envConfig.GetNameSpace())
+	repoConfig.EnvVarsMap = envConfig
 
 	return repoConfig
 }
@@ -166,4 +182,72 @@ func readFromPackageJSON() (string, string) {
 		os.Exit(1)
 	}
 	return packageJSONConfig.Name, packageJSONConfig.Version
+}
+
+func newEnvMappingFromRepoConfig (r RepoConfigMap) envMapping {
+
+	envConfig := make(envMapping)
+
+	environmentToBranchMappings := map[string][]string{
+		"production":  {"production"},
+		"staging":     {"master", "staging"},
+		"development": {"else", "dev"},
+		"acceptance":  {"acceptance"},
+		"preview":     {"preview"},
+	}
+
+	headingToLookFor := environmentToBranchMappings[r.Namespace]
+	branchNameHeadings := r.Application.KubernetesTemplate.BranchVariables
+	re := regexp.MustCompile(fmt.Sprintf("(%s),?", strings.Join(headingToLookFor, "|")))
+
+	// Parse and add the global env vars
+	for _, envVar := range r.Application.KubernetesTemplate.GlobalVariables {
+		split := strings.Split(envVar, "=")
+		envConfig[split[0]] = split[1]
+	}
+
+	// Loop over the branch names we would match with
+	// loop over the un-split headings
+	for heading := range branchNameHeadings {
+		if re.MatchString(heading) {
+			for _, envVar := range branchNameHeadings[heading] {
+				split := strings.Split(envVar, "=")
+				envConfig[split[0]] = split[1]
+			}
+		}
+	}
+
+	// if there is an overriding namespace, use it
+	// this could be different from the inferred namespace (KD_KUBERNETES_NAMESPACE)
+	if _, ok := envConfig["NAMESPACE"]; !ok {
+		envConfig["NAMESPACE"] = r.Namespace
+	}
+
+	// Include the template freebie variables
+	envConfig["KD_RELEASE_NAME"] = r.ReleaseName
+	envConfig["KD_APP_NAME"] = r.Application.Name + "-" + r.GitBranch
+	envConfig["KD_KUBERNETES_NAMESPACE"] = r.Namespace
+	envConfig["KD_GIT_BRANCH"] = r.GitBranch
+	envConfig["KD_GIT_SHA"] = r.GitSHA
+	envConfig["KD_IMAGE_FULL_PATH"] = r.ImageFullPath
+	envConfig["KD_IMAGE_TAG"] = r.ImageTag
+
+	// Add the variables to the environment, doing any inline substitutions
+	for key, value := range envConfig {
+		var envVarBuf bytes.Buffer
+		tmplVar, err := template.New("EnvVar: " + key).Parse(value)
+		err = tmplVar.Execute(&envVarBuf, envConfig)
+		if err != nil {
+			fmt.Println("=> Uh oh, failed to do a substitution in one of your template variables.")
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		envConfig[key] = envVarBuf.String()
+	}
+
+	return envConfig
+}
+
+func (envConfig *envMapping) GetNameSpace() string {
+	return (*envConfig)["NAMESPACE"]
 }
