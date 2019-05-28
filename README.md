@@ -232,7 +232,7 @@ The branch-speciifc variables are parsed first, which means that the `globalVari
 
 ### Exposing environment variables during build time
 
-To enable exposing branch variables to the docker build process you can simply enable it in the deploy.yaml file:
+To enable exposing branch variables to the docker build process you can simply enable it (exposeBuildArgs: true) in the deploy.yaml file:
 
 ```
 application:
@@ -254,6 +254,9 @@ ARG ARGUMENT
 
 RUN echo "$ARGUMENT"
 ```
+
+*Note* When you use branch specific build arguments in your final docker image, you might lose some flexibility. If you have
+environment or cluster-specific variables that need to be used by the application at run-time, we advise using environment variables rather than build arguments.
 
 ### Usage
 
