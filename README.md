@@ -238,7 +238,7 @@ To enable exposing branch variables to the docker build process you can simply e
 application:
   name: kube-deploy
   version: 0.0.1
-  exposeBuildArgs: true
+  exposeBuildArgs: true # This needs to be true in order for the branchVariables to be exposed to the docker build command
   kubernetesTemplate:
     branchVariables:
       production:
