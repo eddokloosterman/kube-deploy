@@ -66,13 +66,23 @@ func makeBuild(repoConfig config.RepoConfigMap) {
 	fmt.Println("=> Okay, let's start the build process!")
 	fmt.Printf("=> First, let's build the image with tag: %s\n\n", repoConfig.ImageFullPath)
 	time.Sleep(1 * time.Second)
+	buildArgs := ""
+
+	if repoConfig.Application.ExposeBuildArgs {
+		// expose all branch variables as build arguments
+		for key, value := range repoConfig.EnvVarsMap {
+			buildArgs += fmt.Sprintf("--build-arg %s=%s ", key, value)
+		}
+
+		fmt.Println("=> Exposing ALL branch variables as build arguments")
+	}
 
 	DockerImageExistsRemote(repoConfig.ImageCachePath)
 
 	// Run docker build
 	if exitCode := cli.StreamAndGetCommandExitCode(
 		"docker",
-		fmt.Sprintf("build --cache-from %s -t %s -t %s %s", repoConfig.ImageCachePath, repoConfig.ImageFullPath, repoConfig.ImageCachePath, repoConfig.PWD),
+		fmt.Sprintf("build %s --cache-from %s -t %s -t %s %s", buildArgs, repoConfig.ImageCachePath, repoConfig.ImageFullPath, repoConfig.ImageCachePath, repoConfig.PWD),
 		// fmt.Sprintf("build -t %s -t %s %s", repoConfig.ImageFullPath, repoConfig.ImageCachePath, repoConfig.PWD),
 	); exitCode != 0 {
 		os.Exit(1)

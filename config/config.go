@@ -5,16 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"text/template"
 	"os"
 	"regexp"
 	"strings"
+	"text/template"
 
 	"gopkg.in/yaml.v2"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/mycujoo/kube-deploy/cli"
-	"github.com/mycujoo/kube-deploy/kube/api"
+	kubeapi "github.com/mycujoo/kube-deploy/kube/api"
 )
 
 type envMapping map[string]string
@@ -32,17 +32,18 @@ type KubernetesTemplate struct {
 }
 
 type Application struct {
-	PackageJSON           bool   `yaml:"packageJSON"`
-	Name                  string `yaml:"name"`
-	Version               string `yaml:"version"`
-	PathToKubernetesFiles string `yaml:"pathToKubernetesFiles"`
+	PackageJSON           bool               `yaml:"packageJSON"`
+	Name                  string             `yaml:"name"`
+	Version               string             `yaml:"version"`
+	ExposeBuildArgs       bool               `yaml:"exposeBuildArgs"`
+	PathToKubernetesFiles string             `yaml:"pathToKubernetesFiles"`
 	KubernetesTemplate    KubernetesTemplate `yaml:"kubernetesTemplate"`
 }
 
 // RepoConfigMap : hash of the YAML data from project's deploy.yaml
 type RepoConfigMap struct {
-	DockerRepository DockerRepository `yaml:"dockerRepository"`
-	Application Application `yaml:"application"`
+	DockerRepository     DockerRepository `yaml:"dockerRepository"`
+	Application          Application      `yaml:"application"`
 	DockerRepositoryName string
 	ClusterName          string // 'production' or 'development' - 'staging' should use the production cluster
 	Namespace            string
@@ -184,7 +185,7 @@ func readFromPackageJSON() (string, string) {
 	return packageJSONConfig.Name, packageJSONConfig.Version
 }
 
-func newEnvMappingFromRepoConfig (r RepoConfigMap) envMapping {
+func newEnvMappingFromRepoConfig(r RepoConfigMap) envMapping {
 
 	envConfig := make(envMapping)
 
