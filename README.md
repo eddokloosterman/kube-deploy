@@ -12,7 +12,7 @@ Welcome to kube-deploy, an opinionated but friendly deployment tool for Kubernet
 
 Learn more about `kube-deploy` with [this video](https://youtu.be/PB5W30ScIL8?t=5m40s) from a recent meetup talk in Amsterdam.
 
-## Commands 
+## Commands
 
 ### Context
     - 'name'                Prints the full path of the docker image that `kube-deploy` would currently build and roll out.
@@ -84,6 +84,7 @@ The following applications are called by `kube-deploy` as subcommands (`os/exec`
     application:
         name: ""
         version: ""
+        exposeBuildArgs: true
         packageJSON: bool (uses a 'package.json' file to override name and version)
         kubernetesTemplate: (see below for details)
             branchVariables: { branchName: [] }
@@ -143,7 +144,7 @@ The test sets are defined in the format:
       - array of commands (eg. `curl localhost:3000`, or `cat start.log` or `bash -c "curl localhost:3000 | grep 'teststring'"`)
 
 Test types:
-- `in-external-container` (default): Starts the test container, then starts another container to run the tests in the same network as the test container. Runs `docker run --rm --network container:<TEST_CONTAINER> <IMAGE> <COMMAND>`, thus starting a new container for each command. 
+- `in-external-container` (default): Starts the test container, then starts another container to run the tests in the same network as the test container. Runs `docker run --rm --network container:<TEST_CONTAINER> <IMAGE> <COMMAND>`, thus starting a new container for each command.
 - `in-test-container`: Starts the test container, then runs the commands inside that container via `docker exec`.
 - `on-host`: Starts the test container, then runs the commands on the host.
 - `host-only`: Runs the commands on the host without starting a test container. Useful for things like `docker-compose up -d` to start up all dependencies and leave them up for the other testsets, then use another `host-only` testset at the end for `docker-compose down`.
@@ -229,6 +230,31 @@ The "KD" freebie variables are:
 
 The branch-speciifc variables are parsed first, which means that the `globalVariables` can reference values from `branchVariables`, but not the other way around. Both `globalVariables` and `branchVariables` can reference the "KD" freebie variables.
 
+### Exposing environment variables during build time
+
+To enable exposing branch variables to the docker build process you can simply enable it in the deploy.yaml file:
+
+```
+application:
+  name: kube-deploy
+  version: 0.0.1
+  exposeBuildArgs: true
+  kubernetesTemplate:
+    branchVariables:
+      production:
+        - ARGUMENT=some_arg
+```
+
+Then, modify your Dockerfile to include your argument:
+
+```
+FROM alpine:latest
+
+ARG ARGUMENT
+
+RUN echo "$ARGUMENT"
+```
+
 ### Usage
 
 To use these in your Kubernetes config file, use the `consul-template` syntax for environment variable interpolation. In practice, this might look like:
@@ -261,7 +287,7 @@ To do an instant rollback, run `kube-deploy rollback`. This will start up pods i
 
 The Deployment that was reverted will be left in place, marked with `kubedeploy-rollback-target`, so that running `kube-deploy rollback` will swap back to the "newer" Deployment. In case the rollback was uncessary and the issue was somewhere else, re-rolling back will make the most recent Deployment live again.
 
-<!-- 
+<!--
 ## Branch Name Mappings
 
     Branch Name     Kubernetes Namespace    Domain
