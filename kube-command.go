@@ -22,17 +22,19 @@ const rolloutStatusFormat = "rollout status --namespace=%s deployment/%s"
 
 func kubeStartRollout() {
 
-	fmt.Println("=> Checking to see if the docker image exists on the remote repository (so we know whether we have to build an image or not).\n=> This might take a minute...")
-	if build.DockerImageExistsRemote(repoConfig.ImageFullPath) {
-		fmt.Println("=> Looks like an image already exists on the remote, so we'll use that.")
-	} else {
-		fmt.Println("=> No image exists, so we'll build one now.")
-		build.MakeAndPushBuild(
-			runFlags.Bool("force-push-image"),
-			runFlags.Bool("override-dirty-workdir"),
-			runFlags.Bool("keep-test-container"),
-			repoConfig,
-		)
+	if !runFlags.Bool("no-build") {
+		fmt.Println("=> Checking to see if the docker image exists on the remote repository (so we know whether we have to build an image or not).\n=> This might take a minute...")
+		if build.DockerImageExistsRemote(repoConfig.ImageFullPath) {
+			fmt.Println("=> Looks like an image already exists on the remote, so we'll use that.")
+		} else {
+			fmt.Println("=> No image exists, so we'll build one now.")
+			build.MakeAndPushBuild(
+				runFlags.Bool("force-push-image"),
+				runFlags.Bool("override-dirty-workdir"),
+				runFlags.Bool("keep-test-container"),
+				repoConfig,
+			)
+		}
 	}
 	fmt.Print("=> Starting rollout.\n\n")
 	cli.LockBeforeRollout(repoConfig.Application.Name, runFlags.Bool("force"))
