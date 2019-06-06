@@ -173,6 +173,7 @@ func parseFlags() {
 	runFlags.NewBoolFlag("force-push-image", "", "Automatically push the built Docker image if the tests pass (useful for CI/CD).")
 	runFlags.NewBoolFlag("keep-test-container", "", "Don't clean up (docker rm) the test containers (Default false).")
 	runFlags.NewBoolFlag("no-canary", "", "Bypass the canary release points (useful for CI/CD).")
+	runFlags.NewBoolFlag("no-build", "", "Skip build during rollout")
 	runFlags.NewBoolFlag("test-only", "", "Skips the run configuration and only tests that the binary can start.")
 	runFlags.NewBoolFlag("quiet", "q", "Silences as much output as possible.")
 	runFlags.NewBoolFlag("keep-kubernetes-template-files", "", "Leaves the templated-out kubernetes files under the directory '.kubedeploy-temp'.")
