@@ -112,7 +112,7 @@ func InitRepoConfig(configFilePath string) RepoConfigMap {
 		if repoConfig.Namespace == "" {
 			repoConfig.Namespace = "acceptance"
 		}
-	case "preview":
+	case "preview", "preview-lannister", "preview-stark", "preview-baratheon", "preview-targaryen", "preview-arryn", "preview-bolton", "preview-greyjoy", "preview-frey":
 		repoConfig.DockerRepositoryName = repoConfig.DockerRepository.ProductionRepositoryName
 		repoConfig.ClusterName = "production"
 		if repoConfig.Namespace == "" {
