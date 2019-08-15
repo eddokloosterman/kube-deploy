@@ -1,0 +1,63 @@
+---
+defaults: &defaults
+  working_directory: /tmp/build
+  environment:    
+    VERSION: 0.1
+    ENV: development    
+
+version: 2
+jobs:
+  build_go_test:
+    <<: *defaults
+    docker:
+      - image: circleci/golang:1.11      
+    steps:
+      - checkout
+      - run:
+          name: Compile code
+          command: ./build.sh
+      - run:
+          name: Run and test
+          command: |
+            ./kube-deploy-linux
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+
+  e2e:
+    <<: *defaults
+    docker:
+      - image: mycujoo/gcloud-docker:latest
+    steps:
+      - attach_workspace:
+          at: /tmp   
+      - run:
+          name: Install and start K3S v0.5.0
+          command: |
+            curl -sfL https://get.k3s.io | sh -
+            sudo chmod -R a+rw /etc/rancher/k3s
+            kubectl version
+        background: true
+        environment:
+          INSTALL_K3S_EXEC: --docker
+          INSTALL_K3S_VERSION: v0.5.0
+      - run: 
+          name: Test deploy on Kubernetes                 
+          command: | 
+            cat /etc/rancher/k3s/k3s.yaml | sed "s/localhost/`hostname`/" | tee ~/.kube/config
+            kubectl get nodes # test k3s
+
+            # todo: deploy sample app
+
+
+workflows:
+  version: 2
+  build_test_deploy:
+    jobs:
+      - build_go_test:
+          context: org-global
+      - e2e:
+          context: org-global
+          requires:
+            - build_go_test            
+  
