@@ -233,11 +233,21 @@ func newEnvMappingFromRepoConfig(r RepoConfigMap) envMapping {
 	envConfig["KD_IMAGE_FULL_PATH"] = r.ImageFullPath
 	envConfig["KD_IMAGE_TAG"] = r.ImageTag
 
+	funcMap := template.FuncMap{
+		// The name "title" is what the function will be called in the template text.
+		"env": os.Getenv,
+	}
+
 	// Add the variables to the environment, doing any inline substitutions
 	for key, value := range envConfig {
-		var envVarBuf bytes.Buffer
-		tmplVar, err := template.New("EnvVar: " + key).Parse(value)
-		err = tmplVar.Execute(&envVarBuf, envConfig)
+		envVarBuf := &bytes.Buffer{}
+		tmplVar, err := template.New("EnvVar: " + key).Funcs(funcMap).Parse(value)
+		if err != nil {
+			fmt.Println("=> Uh oh, something went wrong with parsing your branch variables.")
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		err = tmplVar.Execute(envVarBuf, envConfig)
 		if err != nil {
 			fmt.Println("=> Uh oh, failed to do a substitution in one of your template variables.")
 			fmt.Println(err)
@@ -248,6 +258,10 @@ func newEnvMappingFromRepoConfig(r RepoConfigMap) envMapping {
 
 	return envConfig
 }
+
+// func getEnv (string envVar) string {
+// 	if hasEnv := os.Getenv()
+// }
 
 func (envConfig *envMapping) GetNameSpace() string {
 	return (*envConfig)["NAMESPACE"]
