@@ -50,8 +50,9 @@ func MakeAndTestBuild(dirtyWorkDirOverride bool, keepTestContainer bool, repoCon
 func workingDirectoryIsClean() bool {
 
 	cleanWorkDirChecks := []bool{
-		cli.GetCommandExitCode("git", "diff-index --quiet HEAD --") == 0, // checks for modified files
-		cli.GetCommandOutput("git", "ls-files --others") == "",           // checks for untracked files
+
+		cli.GetCommandOutput("git", "status -s") == "", // checks for changes
+
 	}
 	for _, clean := range cleanWorkDirChecks {
 		if !clean {
