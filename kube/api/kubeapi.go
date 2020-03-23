@@ -5,7 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"k8s.io/api/core/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/retry"
+
 	// Uncomment the following line to load the gcp plugin (only required to authenticate against GKE clusters).
 	// "k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -50,17 +52,17 @@ func Setup(namespaceParam string) *kubernetes.Clientset {
 	return clientset
 }
 
-func GetSingleDeployment(name string) *v1beta1.Deployment {
+func GetSingleDeployment(name string) *appsv1.Deployment {
 	deployment, _ := clientSet.
-		ExtensionsV1beta1().Deployments(namespace).
+		AppsV1().Deployments(namespace).
 		Get(name, metav1.GetOptions{})
 	// Return even if nil
 	return deployment
 }
 
-func UpdateDeployment(name string, callback func(*v1beta1.Deployment)) *v1beta1.Deployment {
+func UpdateDeployment(name string, callback func(*appsv1.Deployment)) *appsv1.Deployment {
 
-	var deployment *v1beta1.Deployment
+	var deployment *appsv1.Deployment
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// Retrieve the latest version of Deployment before attempting update
@@ -68,7 +70,7 @@ func UpdateDeployment(name string, callback func(*v1beta1.Deployment)) *v1beta1.
 		// result, getErr := deploymentsClient.Get("demo-deployment", metav1.GetOptions{})
 		deployment = GetSingleDeployment(name)
 		callback(deployment)
-		_, updateErr := clientSet.ExtensionsV1beta1().Deployments(namespace).
+		_, updateErr := clientSet.AppsV1().Deployments(namespace).
 			Update(deployment)
 		return updateErr
 	})
@@ -80,21 +82,20 @@ func UpdateDeployment(name string, callback func(*v1beta1.Deployment)) *v1beta1.
 	return deployment
 }
 
-func AddDeploymentLabel(deployment *v1beta1.Deployment, key string, value string) {
+func AddDeploymentLabel(deployment *appsv1.Deployment, key string, value string) {
 	existingLabels := deployment.GetLabels()
 	existingLabels[key] = value
 }
 
-func RemoveDeploymentLabel(deployment *v1beta1.Deployment, key string) {
+func RemoveDeploymentLabel(deployment *appsv1.Deployment, key string) {
 	existingLabels := deployment.GetLabels()
 	delete(existingLabels, key)
 }
 
-func DeleteDeployment(deployment *v1beta1.Deployment) {
+func DeleteDeployment(deployment *appsv1.Deployment) {
 	deletePolicy := metav1.DeletePropagationForeground
 
-	if err := clientSet.
-		ExtensionsV1beta1().Deployments(namespace).
+	if err := clientSet.AppsV1().Deployments(namespace).
 		Delete(deployment.Name, &metav1.DeleteOptions{
 			PropagationPolicy: &deletePolicy,
 		}); err != nil {
@@ -123,14 +124,12 @@ func DeleteIngress(ingress *v1beta1.Ingress) {
 	}
 }
 
-func ListDeployments(labelFilter map[string]string) *v1beta1.DeploymentList {
+func ListDeployments(labelFilter map[string]string) *appsv1.DeploymentList {
 
 	label := labels.Set(labelFilter)
+	opts := metav1.ListOptions{LabelSelector: label.String()}
 
-	deployments, err := clientSet.
-		ExtensionsV1beta1().Deployments(namespace).
-		List(metav1.ListOptions{LabelSelector: label.String()})
-
+	deployments, err := clientSet.AppsV1().Deployments(namespace).List(opts)
 	if err != nil {
 		panic(err.Error())
 	}
