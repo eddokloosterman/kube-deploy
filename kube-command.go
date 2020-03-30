@@ -79,7 +79,7 @@ func kubeStartRollout() {
 	// Update with release time and firstCanaryPods replicas
 	thisDeployment = kubeapi.UpdateDeployment(thisDeployment.Name, func(deployment *appsv1.Deployment) {
 		// Add the 'kubedeploy-releasetime' label (which will force the deployment to recreate pods if it already existed)
-		deployment.Spec.Template.Labels["kubedeploy-releasetime"] = strconv.FormatInt(rolloutStartTime.Unix(), 10)
+		deployment.Spec.Template.ObjectMeta.Labels["kubedeploy-releasetime"] = strconv.FormatInt(rolloutStartTime.Unix(), 10)
 
 		// Quickly scale to only one pod
 		fmt.Printf("=> Scaling to first canary point: %d pod(s)\n", firstCanaryPods)
@@ -136,15 +136,23 @@ func kubeStartRollout() {
 	// Tag the new release with 'is-live'
 	fmt.Println("=> Tagging the new release with the tag 'kubedeploy-is-live'.")
 	thisDeployment = kubeapi.UpdateDeployment(thisDeployment.Name, func(deployment *appsv1.Deployment) {
-		deployment.Labels["kubedeploy-is-live"] = "true"
+		if len(deployment.ObjectMeta.Labels) == 0 {
+			deployment.ObjectMeta.Labels = make(map[string]string, 1)
+		}
+		deployment.ObjectMeta.Labels["kubedeploy-is-live"] = "true"
 	})
 
 	// Tag older release with 'instant-rollback-target'
 	if mostRecentRelease.Name != "" {
 		fmt.Printf("=> Tagging release %s with tag 'instant-rollback-target'.\n=> You can rollback to this in one command with `kube-deploy rollback`.\n", mostRecentRelease.Name)
 		kubeapi.UpdateDeployment(mostRecentRelease.Name, func(deployment *appsv1.Deployment) {
-			deployment.Labels["kubedeploy-rollback-target"] = "true"
-			delete(deployment.Labels, "kubedeploy-is-live")
+			if len(deployment.ObjectMeta.Labels) == 0 {
+				deployment.ObjectMeta.Labels = make(map[string]string, 1)
+			}
+			deployment.ObjectMeta.Labels["kubedeploy-rollback-target"] = "true"
+			if _, ok := deployment.ObjectMeta.Labels["kubedeploy-is-live"]; ok {
+				delete(deployment.ObjectMeta.Labels, "kubedeploy-is-live")
+			}
 		})
 	} else {
 		fmt.Println("=> Since there are no previous deployments, no 'kubedeploy-rollback-target' will be assigned.")
@@ -172,8 +180,8 @@ func safeBailOut(thisDeployment *appsv1.Deployment, mostRecentRelease *appsv1.De
 		fmt.Printf("=> Scaling the previous release %s back up to %d pods.\n", mostRecentRelease.Name, pods)
 		kubeapi.UpdateDeployment(mostRecentRelease.Name, func(deployment *appsv1.Deployment) {
 			deployment.Spec.Replicas = pods
-			deployment.Labels["kubedeploy-is-live"] = "true"
-			delete(deployment.Labels, "kubedeploy-rollback-target")
+			deployment.ObjectMeta.Labels["kubedeploy-is-live"] = "true"
+			delete(deployment.ObjectMeta.Labels, "kubedeploy-rollback-target")
 		})
 		cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf(rolloutStatusFormat, repoConfig.EnvVarsMap.GetNameSpace(), mostRecentRelease.Name))
 
@@ -202,7 +210,7 @@ func kubeRollingRestart() {
 
 	isLive := isLiveDeployments.Items[0]
 	kubeapi.UpdateDeployment(isLive.Name, func(deployment *appsv1.Deployment) {
-		deployment.Spec.Template.Labels["kubedeploy-last-rolling-restart"] = strconv.FormatInt(time.Now().Unix(), 10)
+		deployment.Spec.Template.ObjectMeta.Labels["kubedeploy-last-rolling-restart"] = strconv.FormatInt(time.Now().Unix(), 10)
 	})
 	cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf(rolloutStatusFormat, repoConfig.EnvVarsMap.GetNameSpace(), isLive.Name))
 
@@ -237,8 +245,8 @@ func kubeInstantRollback() {
 	fmt.Printf("=> Rolling back to %s, pod count %d.\n", rollbackTarget.Name, *replicas)
 
 	kubeapi.UpdateDeployment(rollbackTarget.Name, func(deployment *appsv1.Deployment) {
-		deployment.Labels["kubedeploy-is-live"] = "true"
-		delete(deployment.Labels, "kubedeploy-rollback-target")
+		deployment.ObjectMeta.Labels["kubedeploy-is-live"] = "true"
+		delete(deployment.ObjectMeta.Labels, "kubedeploy-rollback-target")
 	})
 	cli.StreamAndGetCommandOutputAndExitCode("kubectl", fmt.Sprintf(rolloutStatusFormat, repoConfig.EnvVarsMap.GetNameSpace(), rollbackTarget.Name))
 
@@ -250,8 +258,8 @@ func kubeInstantRollback() {
 	// Scale old pods down to zero
 	kubeapi.UpdateDeployment(isLive.Name, func(deployment *appsv1.Deployment) {
 		deployment.Spec.Replicas = new(int32)
-		deployment.Labels["kubedeploy-rollback-target"] = "true"
-		delete(deployment.Labels, "kubedeploy-is-live")
+		deployment.ObjectMeta.Labels["kubedeploy-rollback-target"] = "true"
+		delete(deployment.ObjectMeta.Labels, "kubedeploy-is-live")
 	})
 
 	fmt.Println("=> Wait for the old pods to scale down to 0.")

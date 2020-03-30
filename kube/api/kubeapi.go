@@ -70,8 +70,7 @@ func UpdateDeployment(name string, callback func(*appsv1.Deployment)) *appsv1.De
 		// result, getErr := deploymentsClient.Get("demo-deployment", metav1.GetOptions{})
 		deployment = GetSingleDeployment(name)
 		callback(deployment)
-		_, updateErr := clientSet.AppsV1().Deployments(namespace).
-			Update(deployment)
+		_, updateErr := clientSet.AppsV1().Deployments(namespace).Update(deployment)
 		return updateErr
 	})
 	if retryErr != nil {
