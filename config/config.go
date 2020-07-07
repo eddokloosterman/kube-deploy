@@ -93,6 +93,10 @@ func InitRepoConfig(configFilePath string) RepoConfigMap {
 		repoConfig.Application.Name, repoConfig.Application.Version = readFromPackageJSON()
 	}
 
+	if repoConfig.GitBranch == "main" {
+		repoConfig.GitBranch = "production"
+	}
+
 	switch branch := repoConfig.GitBranch; branch {
 	case "production":
 		repoConfig.DockerRepositoryName = repoConfig.DockerRepository.ProductionRepositoryName
