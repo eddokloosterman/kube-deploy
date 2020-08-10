@@ -93,7 +93,7 @@ func InitRepoConfig(configFilePath string) RepoConfigMap {
 		repoConfig.Application.Name, repoConfig.Application.Version = readFromPackageJSON()
 	}
 
-	if repoConfig.GitBranch == "main" {
+	if repoConfig.GitBranch == "main" || strings.Contains(repoConfig.GitBranch, "production") {
 		repoConfig.GitBranch = "production"
 	}
 
